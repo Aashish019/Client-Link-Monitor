@@ -6,6 +6,7 @@ import logging
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict, Any
+from pydantic import BaseModel
 
 import os
 from pythonjsonlogger import jsonlogger
@@ -195,7 +196,6 @@ async def manual_restart(name: str):
     return {"status": "restart_triggered", "name": name}
 
 # Client Management
-from pydantic import BaseModel
 
 class Client(BaseModel):
     name: str

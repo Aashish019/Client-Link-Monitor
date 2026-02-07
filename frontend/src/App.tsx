@@ -12,7 +12,16 @@ import { cn } from './lib/utils';
 import { UrlStatus, WebSocketPayload } from './types';
 
 // Components
-const StatCard = ({ title, value, subtext, icon: Icon, color, trend }: any) => (
+interface StatCardProps {
+  title: string;
+  value: string | number;
+  subtext: string;
+  icon: React.ElementType;
+  color: string;
+  trend?: number;
+}
+
+const StatCard = ({ title, value, subtext, icon: Icon, color, trend }: StatCardProps) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
@@ -132,7 +141,13 @@ const UrlCard = ({ item }: { item: UrlStatus }) => {
 };
 
 // Add Client Modal Component
-const AddClientModal = ({ isOpen, onClose, onAdd }: any) => {
+interface AddClientModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onAdd: (name: string, url: string) => void;
+}
+
+const AddClientModal = ({ isOpen, onClose, onAdd }: AddClientModalProps) => {
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
 
