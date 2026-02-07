@@ -248,14 +248,16 @@ async def check_single_url(client: httpx.AsyncClient, name: str, url: str):
             "status_code": 0,
             "error": str(e),
         }
-    
+
     # Log result to DB asynchronously
     asyncio.create_task(log_check(name, result["status"]))
-    
+
     # Trigger alert if transitioning to down
     if result["status"] == "down" and state.previous_url_statuses.get(name) != "down":
-        asyncio.create_task(trigger_n8n_alert(name, url, result["error"] or "Status check failed"))
-    
+        asyncio.create_task(
+            trigger_n8n_alert(name, url, result["error"] or "Status check failed")
+        )
+
     state.previous_url_statuses[name] = result["status"]
     return result
 
@@ -331,7 +333,7 @@ async def add_client(client: Client):
 async def import_clients(clients: Dict[str, str]):
     for name, url in clients.items():
         await add_db_client(name, url)
-    
+
     global CLIENT_URLS
     CLIENT_URLS = await get_db_clients()
     asyncio.create_task(monitor_urls_once())
