@@ -36,7 +36,7 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Run tests
-        run: uv run pytest
+        run: PYTHONPATH=. uv run pytest
 
   frontend-ci:
     runs-on: ubuntu-latest
