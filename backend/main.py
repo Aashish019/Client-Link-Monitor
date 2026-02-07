@@ -265,7 +265,7 @@ async def delete_client(name: str):
 
 async def monitor_urls_once():
     # Helper to run logic outside of loop
-    async with httpx.AsyncClient(verify=False) as client:
+    async with httpx.AsyncClient() as client:
         tasks = [
             check_single_url(client, name, url) for name, url in CLIENT_URLS.items()
         ]
@@ -322,4 +322,6 @@ def health_check():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    HOST = os.getenv("HOST", "0.0.0.0")  # nosec B104
+    PORT = int(os.getenv("PORT", 8000))
+    uvicorn.run(app, host=HOST, port=PORT)

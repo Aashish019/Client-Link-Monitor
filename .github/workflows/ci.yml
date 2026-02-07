@@ -21,7 +21,7 @@ jobs:
         run: |
           cd backend
           uv sync --dev
-          uv run bandit -r . -ll
+          uv run bandit -r . -ll --exclude ./.venv
 
       - name: Frontend Security Scan (npm audit)
         run: |
