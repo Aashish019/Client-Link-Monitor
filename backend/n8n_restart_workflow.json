@@ -1,0 +1,189 @@
+{
+    "nodes": [
+        {
+            "parameters": {
+                "jsCode": "const items = $input.all();\n\nreturn items.map(item => {\n  const { name, url, statusCode  } = item.json;\n  return {\n    json: {\n      trigger: `restart_${name}`,\n      url,\n      statusCode\n    }\n  };\n});\n"
+            },
+            "id": "7dde5756-13dc-4ba2-9d94-0dbfacd3bcd1",
+            "name": "rename v2",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 1,
+            "position": [
+                352,
+                480
+            ]
+        },
+        {
+            "parameters": {
+                "job": "={{ $json.trigger }}"
+            },
+            "type": "n8n-nodes-base.jenkins",
+            "typeVersion": 1,
+            "position": [
+                576,
+                480
+            ],
+            "id": "5d2d7ce6-a843-4b8b-8059-0ae74f4080d1",
+            "name": "Jenkins v2",
+            "credentials": {
+                "jenkinsApi": {
+                    "id": "T1QiiivIBWbSsusU",
+                    "name": "Jenkins account"
+                }
+            }
+        },
+        {
+            "parameters": {},
+            "type": "n8n-nodes-base.wait",
+            "typeVersion": 1.1,
+            "position": [
+                800,
+                480
+            ],
+            "id": "9a7c54d5-14d8-4e6c-abd1-fdb8ea9dce74",
+            "name": "Wait v2",
+            "webhookId": "68a9eaa2-4650-4207-95e0-3058b52663a4"
+        },
+        {
+            "parameters": {
+                "chatId": "-4870194178",
+                "text": "=✅ *Server successfully restarted* ✅\n🌐 URL: {{ $('rename v2').item.json.url }}\n🕒 Time: {{ $now }}\n🔧 Trigger: {{ $('rename v2').item.json.trigger.replace(/([_*[\\]()~`>#+\\-=|{}.!\\\\])/g, '\\\\$1') }}\n",
+                "replyMarkup": "forceReply",
+                "forceReply": {},
+                "additionalFields": {
+                    "appendAttribution": false
+                }
+            },
+            "type": "n8n-nodes-base.telegram",
+            "typeVersion": 1.2,
+            "position": [
+                1024,
+                480
+            ],
+            "id": "89231bf7-991e-42e6-9c6c-239cee287adf",
+            "name": "Send a sucess message v2",
+            "webhookId": "c9d85a8d-c691-43b3-998c-63ffa9d95fb2",
+            "credentials": {
+                "telegramApi": {
+                    "id": "r2co784Mpjpb3ori",
+                    "name": "McMillan Bot"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "monitor-alert",
+                "options": {}
+            },
+            "name": "Dashboard Webhook",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 1,
+            "position": [
+                -96,
+                528
+            ],
+            "id": "4b36ef18-5d72-4fa4-b989-cb50f7673f7f",
+            "webhookId": "ad00a457-5cbf-4122-a399-e8ab35ee0875",
+            "notes": "Receives alert/restart from Dashboard"
+        },
+        {
+            "parameters": {
+                "keepOnlySet": true,
+                "values": {
+                    "string": [
+                        {
+                            "name": "name",
+                            "value": "={{$json.body.name}}"
+                        },
+                        {
+                            "name": "url",
+                            "value": "={{$json.body.url}}"
+                        }
+                    ],
+                    "number": [
+                        {
+                            "name": "statusCode",
+                            "value": "={{$json.body.status}}"
+                        },
+                        {
+                            "name": "error.status",
+                            "value": "={{$json.body.error.status}}"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "name": "Format Payload",
+            "type": "n8n-nodes-base.set",
+            "typeVersion": 1,
+            "position": [
+                128,
+                528
+            ],
+            "id": "eff8c1a2-27ea-45e5-a37c-0431493db2af"
+        }
+    ],
+    "connections": {
+        "rename v2": {
+            "main": [
+                [
+                    {
+                        "node": "Jenkins v2",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Jenkins v2": {
+            "main": [
+                [
+                    {
+                        "node": "Wait v2",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Wait v2": {
+            "main": [
+                [
+                    {
+                        "node": "Send a sucess message v2",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Dashboard Webhook": {
+            "main": [
+                [
+                    {
+                        "node": "Format Payload",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Format Payload": {
+            "main": [
+                [
+                    {
+                        "node": "rename v2",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "pinData": {},
+    "meta": {
+        "templateCredsSetupCompleted": true,
+        "instanceId": "94e2befbd64bb353f89441f4f1f44d9469e795893c7a8907f6f1b3a3c02c52a3"
+    }
+}
