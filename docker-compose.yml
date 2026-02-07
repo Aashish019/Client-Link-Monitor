@@ -9,6 +9,11 @@ services:
     environment:
       - N8N_WEBHOOK_URL=https://n8n.mcmillan.solutions/webhook/monitor-alert
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
 
   frontend:
     build: ./frontend
@@ -18,3 +23,8 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M

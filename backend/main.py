@@ -5,6 +5,7 @@ import json
 import logging
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from typing import List, Dict, Any
 from pydantic import BaseModel
 
@@ -34,6 +35,13 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# Global HTTPX client with optimized connection pooling
+http_client = httpx.AsyncClient(
+    limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
+    timeout=httpx.Timeout(10.0, connect=5.0),
 )
 
 # Configuration
@@ -162,21 +170,20 @@ async def trigger_n8n_alert(name: str, url: str, error_detail: str):
         )
         return
 
-    async with httpx.AsyncClient() as client:
-        try:
-            payload = {
-                "name": name,
-                "url": url,
-                "status": 500,  # Providing 500 as per user example for down
-                "error": {
-                    "status": "500",
-                    "detail": error_detail,
-                },  # Matching structure
-            }
-            await client.post(N8N_WEBHOOK_URL, json=payload)
-            logger.info(f"Triggered n8n webhook for {name}")
-        except Exception as e:
-            logger.error(f"Failed to trigger n8n: {e}")
+    try:
+        payload = {
+            "name": name,
+            "url": url,
+            "status": 500,  # Providing 500 as per user example for down
+            "error": {
+                "status": "500",
+                "detail": error_detail,
+            },  # Matching structure
+        }
+        await http_client.post(N8N_WEBHOOK_URL, json=payload)
+        logger.info(f"Triggered n8n webhook for {name}")
+    except Exception as e:
+        logger.error(f"Failed to trigger n8n: {e}")
 
 
 async def monitor_urls():
@@ -265,11 +272,10 @@ async def delete_client(name: str):
 
 async def monitor_urls_once():
     # Helper to run logic outside of loop
-    async with httpx.AsyncClient() as client:
-        tasks = [
-            check_single_url(client, name, url) for name, url in CLIENT_URLS.items()
-        ]
-        results = await asyncio.gather(*tasks)
+    tasks = [
+        check_single_url(http_client, name, url) for name, url in CLIENT_URLS.items()
+    ]
+    results = await asyncio.gather(*tasks)
 
     results.sort(key=lambda x: 0 if x["status"] == "down" else 1)
     state.url_statuses = results
@@ -289,8 +295,15 @@ async def monitor_urls_once():
 
 @app.on_event("startup")
 async def startup_event():
+    logger.info("Startup complete")
     asyncio.create_task(monitor_system())
     asyncio.create_task(monitor_urls())
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    logger.info("Closing HTTP client")
+    await http_client.aclose()
 
 
 @app.websocket("/ws")
