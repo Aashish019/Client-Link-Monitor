@@ -7,8 +7,21 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict, Any
 
+import os
+from pythonjsonlogger import jsonlogger
+
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+JSON_LOGS = os.getenv("JSON_LOGS", "true").lower() == "true"
+
+handler = logging.StreamHandler()
+if JSON_LOGS:
+    formatter = jsonlogger.JsonFormatter(
+        '%(asctime)s %(levelname)s %(name)s %(message)s'
+    )
+    handler.setFormatter(formatter)
+
+logging.basicConfig(level=LOG_LEVEL, handlers=[handler])
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
@@ -272,6 +285,16 @@ async def websocket_endpoint(websocket: WebSocket):
 @app.get("/")
 def read_root():
     return {"status": "ok", "service": "Butter Smooth Monitor"}
+
+@app.get("/health")
+def health_check():
+    return {
+        "status": "healthy",
+        "system": {
+            "cpu": state.system_stats.get("cpu"),
+            "memory": state.system_stats.get("memory", {}).get("percent")
+        }
+    }
 
 if __name__ == "__main__":
     import uvicorn

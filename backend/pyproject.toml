@@ -10,4 +10,11 @@ dependencies = [
     "psutil>=7.2.2",
     "uvicorn>=0.40.0",
     "websockets>=16.0",
+    "python-json-logger>=2.0.7",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.3.0",
 ]
