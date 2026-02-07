@@ -6,10 +6,15 @@ import {
   Search,
   AlertCircle,
   CheckCircle2,
-  RefreshCw
+  RefreshCw,
+  Moon,
+  Sun
 } from 'lucide-react';
 import { cn } from './lib/utils';
 import { UrlStatus, WebSocketPayload } from './types';
+
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
+const WS_BASE = import.meta.env.VITE_WS_BASE || 'ws://localhost:8000';
 
 // Components
 interface StatCardProps {
@@ -25,7 +30,8 @@ const StatCard = ({ title, value, subtext, icon: Icon, color, trend }: StatCardP
   <motion.div
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
-    className="glass-panel p-6 flex flex-col justify-between h-full relative overflow-hidden group"
+    className="glass-card p-6 flex flex-col justify-between h-full relative overflow-hidden group border-t-4"
+    style={{ borderColor: color.includes('success') ? 'var(--accent-color)' : 'rgba(212, 74, 58, 0.5)' }}
   >
     <div className={`absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity ${color}`}>
       <Icon size={64} />
@@ -61,7 +67,7 @@ const UrlCard = ({ item }: { item: UrlStatus }) => {
   const handleRestart = async () => {
     setIsRestarting(true);
     try {
-      await fetch(`http://localhost:8000/api/restart/${item.name}`, { method: 'POST' });
+      await fetch(`${API_BASE}/api/restart/${item.name}`, { method: 'POST' });
     } catch (e) {
       console.error("Restart failed", e);
     }
@@ -73,7 +79,7 @@ const UrlCard = ({ item }: { item: UrlStatus }) => {
 
     setIsDeleting(true);
     try {
-      await fetch(`http://localhost:8000/api/clients/${item.name}`, { method: 'DELETE' });
+      await fetch(`${API_BASE}/api/clients/${item.name}`, { method: 'DELETE' });
     } catch (e) {
       console.error("Delete failed", e);
       setIsDeleting(false);
@@ -90,7 +96,7 @@ const UrlCard = ({ item }: { item: UrlStatus }) => {
       exit={{ opacity: 0, scale: 0.9 }}
       whileHover={{ y: -5, transition: { duration: 0.2 } }}
       className={cn(
-        "glass-panel p-4 flex items-center justify-between border-l-4 group relative",
+        "glass-card p-5 flex items-center justify-between border-l-4 group relative",
         isUp ? "border-l-success" : "border-l-warning"
       )}
     >
@@ -126,6 +132,22 @@ const UrlCard = ({ item }: { item: UrlStatus }) => {
             {isRestarting ? <span>Triggered</span> : <span>Restart</span>}
           </button>
         )}
+
+        {/* Uptime Stats */}
+        {item.uptime && (
+          <div className="flex space-x-2 mb-2">
+            <div className="flex flex-col items-end">
+              <span className="text-[10px] text-textMuted uppercase font-bold tracking-tighter">24h Uptime</span>
+              <span className={cn(
+                "text-xs font-mono font-bold",
+                item.uptime['24h'] >= 99 ? "text-success" : item.uptime['24h'] >= 90 ? "text-primary" : "text-warning"
+              )}>
+                {item.uptime['24h']}%
+              </span>
+            </div>
+          </div>
+        )}
+
         <div className={cn(
           "font-bold text-lg",
           isUp ? "text-success" : "text-warning"
@@ -212,7 +234,29 @@ const AddClientModal = ({ isOpen, onClose, onAdd }: AddClientModalProps) => {
 };
 
 export default function App() {
-  const [socketUrl] = useState('ws://localhost:8000/ws');
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('theme') as 'light' | 'dark') || 'dark';
+    }
+    return 'dark';
+  });
+
+  const toggleTheme = () => {
+    const newTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(newTheme);
+    localStorage.setItem('theme', newTheme);
+  };
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [theme]);
+
+  const [socketUrl] = useState(`${WS_BASE}/ws`);
   const { lastMessage, readyState } = useWebSocket(socketUrl, {
     shouldReconnect: () => true,
     reconnectInterval: 3000,
@@ -239,7 +283,7 @@ export default function App() {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      await fetch('http://localhost:8000/api/refresh', { method: 'POST' });
+      await fetch(`${API_BASE}/api/refresh`, { method: 'POST' });
     } catch (e) {
       console.error("Refresh failed", e);
       setIsRefreshing(false);
@@ -248,7 +292,7 @@ export default function App() {
 
   const handleAddClient = async (name: string, url: string) => {
     try {
-      await fetch('http://localhost:8000/api/clients', {
+      await fetch(`${API_BASE}/api/clients`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, url })
@@ -270,7 +314,7 @@ export default function App() {
     reader.onload = async (e) => {
       try {
         const json = JSON.parse(e.target?.result as string);
-        const res = await fetch('http://localhost:8000/api/clients/import', {
+        const res = await fetch(`${API_BASE}/api/clients/import`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(json)
@@ -314,7 +358,7 @@ export default function App() {
   const healthPercent = totalCount > 0 ? (upCount / totalCount) * 100 : 100;
 
   return (
-    <div className="min-h-screen bg-bg text-text p-6 lg:p-10">
+    <div className="min-h-screen p-4 md:p-8 lg:p-12 transition-all duration-500">
       <AddClientModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -329,43 +373,55 @@ export default function App() {
       />
 
       {/* Header */}
-      <header className="flex flex-col md:flex-row justify-between items-center mb-10 gap-4">
-        <div>
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-primary to-blue-400 bg-clip-text text-transparent">
-            Client Link Monitor
-          </h1>
-          <p className="text-textMuted mt-2">Real-time infrastructure dashboard</p>
-        </div>
+      <header className="flex flex-col md:flex-row justify-between items-center mb-12 gap-6">
         <div className="flex items-center space-x-4">
+          <div className="p-3 bg-primary/20 rounded-2xl glass-panel">
+            <Server size={32} className="text-primary" />
+          </div>
+          <div>
+            <h1 className="text-3xl md:text-4xl font-black tracking-tight bg-gradient-to-r from-primary to-blue-400 bg-clip-text text-transparent">
+              LINK MONITOR
+            </h1>
+            <p className="text-sm font-medium opacity-60 uppercase tracking-[0.2em]">Infrastructure Dashboard</p>
+          </div>
+        </div>
+        <div className="flex items-center flex-wrap justify-center gap-3">
+          <button
+            onClick={toggleTheme}
+            className="p-3 glass-panel hover:bg-white/10 rounded-xl transition-all"
+            title="Toggle Theme"
+          >
+            {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
+          </button>
+          <div className="h-8 w-px bg-white/10 hidden md:block" />
           <button
             onClick={() => setIsModalOpen(true)}
-            className="px-4 py-2 bg-surfaceHighlight hover:bg-white/10 rounded-lg text-sm font-medium transition-colors"
+            className="px-5 py-2.5 glass-panel hover:bg-white/5 rounded-xl text-sm font-semibold transition-all border border-white/5"
           >
-            + Add Service
+            + New Service
           </button>
           <button
             onClick={handleImportClick}
-            className="px-4 py-2 bg-surfaceHighlight hover:bg-white/10 rounded-lg text-sm font-medium transition-colors"
+            className="px-5 py-2.5 glass-panel hover:bg-white/5 rounded-xl text-sm font-semibold transition-all border border-white/5"
           >
             Import JSON
           </button>
-          <div className="h-8 w-px bg-border mx-2"></div>
           <button
             onClick={handleRefresh}
             disabled={isRefreshing}
             className={cn(
-              "px-4 py-2 rounded-lg font-medium transition-all flex items-center space-x-2",
+              "px-5 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center space-x-2 shadow-lg",
               isRefreshing
-                ? "bg-surfaceHighlight text-textMuted cursor-wait"
-                : "bg-primary text-white hover:bg-blue-600 shadow-lg shadow-blue-900/20"
+                ? "bg-white/5 opacity-50 cursor-wait"
+                : "bg-primary text-white hover:bg-blue-600 shadow-primary/20"
             )}
           >
             <RefreshCw size={18} className={isRefreshing ? "animate-spin" : ""} />
-            <span>{isRefreshing ? 'Refreshing...' : 'Refresh Now'}</span>
+            <span>{isRefreshing ? 'Refreshing' : 'Sync Area'}</span>
           </button>
-          <div className={`px-4 py-2 rounded-full border border-border flex items-center space-x-2 ${readyState === ReadyState.OPEN ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'}`}>
+          <div className={`px-4 py-2 rounded-xl border border-white/10 flex items-center space-x-2 glass-panel ${readyState === ReadyState.OPEN ? 'text-success' : 'text-warning'}`}>
             <div className={`w-2 h-2 rounded-full ${readyState === ReadyState.OPEN ? 'bg-success animate-pulse' : 'bg-warning'}`} />
-            <span className="font-semibold text-sm">{connectionStatus}</span>
+            <span className="font-bold text-xs uppercase tracking-widest">{connectionStatus}</span>
           </div>
         </div>
       </header>

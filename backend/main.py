@@ -3,10 +3,11 @@ import psutil
 import httpx
 import json
 import logging
+import aiosqlite
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 
 import os
@@ -45,26 +46,112 @@ http_client = httpx.AsyncClient(
 )
 
 # Configuration
-URL_CHECK_INTERVAL = 180  # 3 minutes
-SYSTEM_CHECK_INTERVAL = 1  # 1 second
-MAX_CONCURRENT_CHECKS = 10
-N8N_WEBHOOK_URL = "https://n8n.mcmillan.solutions/webhook/monitor-alert"  # User to provide or we'll mock/log for now if not set
+DATA_DIR = os.getenv("DATA_DIR", ".")
+CLIENTS_FILE = os.path.join(DATA_DIR, "clients.json")
+URL_CHECK_INTERVAL = int(os.getenv("URL_CHECK_INTERVAL", "180"))
+SYSTEM_CHECK_INTERVAL = int(os.getenv("SYSTEM_CHECK_INTERVAL", "1"))
+MAX_CONCURRENT_CHECKS = int(os.getenv("MAX_CONCURRENT_CHECKS", "10"))
+N8N_WEBHOOK_URL = os.getenv("N8N_WEBHOOK_URL", "")
+DB_FILE = os.path.join(DATA_DIR, "monitor.db")
+
+# Ensure data directory exists
+if not os.path.exists(DATA_DIR):
+    os.makedirs(DATA_DIR)
 
 
-# Client List
-def load_clients():
-    try:
-        with open("clients.json", "r") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        logger.error("clients.json not found!")
-        return {}
-    except json.JSONDecodeError:
-        logger.error("Invalid JSON in clients.json")
-        return {}
+# Database Helpers
+async def init_db():
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute(
+            "CREATE TABLE IF NOT EXISTS clients (name TEXT PRIMARY KEY, url TEXT)"
+        )
+        await db.execute(
+            "CREATE TABLE IF NOT EXISTS status_checks (name TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP, status TEXT)"
+        )
+        await db.commit()
+
+        # Data Migration Logic
+        cursor = await db.execute("SELECT COUNT(*) FROM clients")
+        count = (await cursor.fetchone())[0]
+
+        if count == 0 and os.path.exists(CLIENTS_FILE):
+            logger.info("Migrating data from clients.json to SQLite...")
+            try:
+                with open(CLIENTS_FILE, "r") as f:
+                    clients = json.load(f)
+                    for name, url in clients.items():
+                        await db.execute(
+                            "INSERT OR IGNORE INTO clients (name, url) VALUES (?, ?)",
+                            (name, url),
+                        )
+                await db.commit()
+                logger.info("Migration successful.")
+            except Exception as e:
+                logger.error(f"Migration failed: {e}")
 
 
-CLIENT_URLS = load_clients()
+async def get_db_clients() -> Dict[str, str]:
+    async with aiosqlite.connect(DB_FILE) as db:
+        async with db.execute("SELECT name, url FROM clients") as cursor:
+            rows = await cursor.fetchall()
+            return {row[0]: row[1] for row in rows}
+
+
+async def add_db_client(name: str, url: str):
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute(
+            "INSERT OR REPLACE INTO clients (name, url) VALUES (?, ?)", (name, url)
+        )
+        await db.commit()
+
+
+async def remove_db_client(name: str):
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute("DELETE FROM clients WHERE name = ?", (name,))
+        await db.execute("DELETE FROM status_checks WHERE name = ?", (name,))
+        await db.commit()
+
+
+async def log_check(name: str, status: str):
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute(
+            "INSERT INTO status_checks (name, status) VALUES (?, ?)", (name, status)
+        )
+        await db.commit()
+
+
+async def get_uptime_stats(name: str) -> Dict[str, float]:
+    """Calculate uptime percentage for 24h and 7d."""
+    async with aiosqlite.connect(DB_FILE) as db:
+        # Last 24h
+        cursor = await db.execute(
+            """
+            SELECT 
+                COUNT(*) FILTER (WHERE status = 'up') * 100.0 / COUNT(*)
+            FROM status_checks 
+            WHERE name = ? AND timestamp >= datetime('now', '-1 day')
+            """,
+            (name,),
+        )
+        uptime_24h = (await cursor.fetchone())[0] or 100.0
+
+        # Last 7d
+        cursor = await db.execute(
+            """
+            SELECT 
+                COUNT(*) FILTER (WHERE status = 'up') * 100.0 / COUNT(*)
+            FROM status_checks 
+            WHERE name = ? AND timestamp >= datetime('now', '-7 days')
+            """,
+            (name,),
+        )
+        uptime_7d = (await cursor.fetchone())[0] or 100.0
+
+        return {"24h": round(uptime_24h, 2), "7d": round(uptime_7d, 2)}
+
+
+# In-memory sync of clients (to avoid querying DB on every interval)
+CLIENT_URLS: Dict[str, str] = {}
 
 
 # State
@@ -154,13 +241,23 @@ async def check_single_url(client: httpx.AsyncClient, name: str, url: str):
             "error": None,
         }
     except Exception as e:
-        return {
+        result = {
             "name": name,
             "url": url,
             "status": "down",
             "status_code": 0,
             "error": str(e),
         }
+    
+    # Log result to DB asynchronously
+    asyncio.create_task(log_check(name, result["status"]))
+    
+    # Trigger alert if transitioning to down
+    if result["status"] == "down" and state.previous_url_statuses.get(name) != "down":
+        asyncio.create_task(trigger_n8n_alert(name, url, result["error"] or "Status check failed"))
+    
+    state.previous_url_statuses[name] = result["status"]
+    return result
 
 
 async def trigger_n8n_alert(name: str, url: str, error_detail: str):
@@ -213,28 +310,16 @@ async def manual_restart(name: str):
 
 
 # Client Management
-
-
 class Client(BaseModel):
     name: str
     url: str
 
 
-def save_clients(clients: Dict[str, str]):
-    try:
-        with open("clients.json", "w") as f:
-            json.dump(clients, f, indent=4)
-    except Exception as e:
-        logger.error(f"Failed to save clients: {e}")
-
-
 @app.post("/api/clients")
 async def add_client(client: Client):
-    if client.name in CLIENT_URLS:
-        return {"error": "Client already exists", "status": "error"}
-
-    CLIENT_URLS[client.name] = client.url
-    save_clients(CLIENT_URLS)
+    await add_db_client(client.name, client.url)
+    global CLIENT_URLS
+    CLIENT_URLS = await get_db_clients()
 
     # Trigger immediate check for new client
     asyncio.create_task(monitor_urls_once())
@@ -244,24 +329,27 @@ async def add_client(client: Client):
 
 @app.post("/api/clients/import")
 async def import_clients(clients: Dict[str, str]):
-    count = 0
     for name, url in clients.items():
-        CLIENT_URLS[name] = url
-        count += 1
-
-    save_clients(CLIENT_URLS)
+        await add_db_client(name, url)
+    
+    global CLIENT_URLS
+    CLIENT_URLS = await get_db_clients()
     asyncio.create_task(monitor_urls_once())
 
-    return {"status": "imported", "count": count}
+    return {"status": "imported", "count": len(clients)}
 
 
 @app.delete("/api/clients/{name}")
 async def delete_client(name: str):
-    if name not in CLIENT_URLS:
-        return {"error": "Client not found", "status": "error"}
+    await remove_db_client(name)
+    global CLIENT_URLS
+    CLIENT_URLS = await get_db_clients()
 
-    del CLIENT_URLS[name]
-    save_clients(CLIENT_URLS)
+    # Update global state immediately
+    state.url_statuses = [u for u in state.url_statuses if u["name"] != name]
+    await manager.broadcast()
+
+    return {"status": "deleted", "name": name}
 
     # Update global state immediately
     state.url_statuses = [u for u in state.url_statuses if u["name"] != name]
@@ -275,20 +363,18 @@ async def monitor_urls_once():
     tasks = [
         check_single_url(http_client, name, url) for name, url in CLIENT_URLS.items()
     ]
-    results = await asyncio.gather(*tasks)
+    check_results = await asyncio.gather(*tasks)
 
-    results.sort(key=lambda x: 0 if x["status"] == "down" else 1)
-    state.url_statuses = results
+    # Attach uptime stats to results
+    final_results = []
+    for res in check_results:
+        stats = await get_uptime_stats(res["name"])
+        res["uptime"] = stats
+        final_results.append(res)
 
-    # Alerting logic (duplicated from loop, could be refactored)
-    # Alerting logic - DISABLED automatic triggers per user request
-    # for res in results:
-    #     if res['status'] == 'down':
-    #          asyncio.create_task(trigger_n8n_alert(
-    #             res['name'],
-    #             res['url'],
-    #             res['error'] or f"HTTP {res['status_code']}"
-    #         ))
+    final_results.sort(key=lambda x: 0 if x["status"] == "down" else 1)
+    state.url_statuses = final_results
+    await manager.broadcast()
 
     await manager.broadcast()
 
@@ -296,6 +382,9 @@ async def monitor_urls_once():
 @app.on_event("startup")
 async def startup_event():
     logger.info("Startup complete")
+    await init_db()
+    global CLIENT_URLS
+    CLIENT_URLS = await get_db_clients()
     asyncio.create_task(monitor_system())
     asyncio.create_task(monitor_urls())
 

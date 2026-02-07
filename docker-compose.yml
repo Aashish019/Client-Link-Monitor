@@ -5,8 +5,14 @@ services:
     ports:
       - "8000:8000"
     environment:
+      - DATA_DIR=/app/data
       - N8N_WEBHOOK_URL=https://n8n.mcmillan.solutions/webhook/monitor-alert
+      - URL_CHECK_INTERVAL=180
+      - LOG_LEVEL=INFO
+      - JSON_LOGS=true
     restart: always
+    volumes:
+      - monitor-data:/app/data
     deploy:
       resources:
         limits:
@@ -26,3 +32,6 @@ services:
         limits:
           cpus: '0.25'
           memory: 256M
+
+volumes:
+  monitor-data:

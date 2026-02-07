@@ -23,6 +23,10 @@ export interface UrlStatus {
     status_code: number;
     error?: string | null;
     checked_at?: string;
+    uptime?: {
+        '24h': number;
+        '7d': number;
+    };
 }
 
 export interface WebSocketPayload {

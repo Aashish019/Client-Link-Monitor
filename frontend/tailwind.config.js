@@ -8,16 +8,13 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Grafana-inspired dark theme
-        bg: '#111217',
-        surface: '#181b1f',
-        surfaceHighlight: '#22252b',
-        border: '#2c3235',
-        primary: '#3274d9',
-        success: '#299c46',
-        warning: '#d44a3a',
-        text: '#c7d0d9',
-        textMuted: '#6e7687'
+        surfaceHighlight: 'var(--surface-highlight)',
+        border: 'var(--border)',
+        primary: 'var(--accent-color)',
+        success: 'var(--success-color)',
+        warning: 'var(--warning-color)',
+        text: 'var(--text-primary)',
+        textMuted: 'var(--text-secondary)'
       },
       fontFamily: {
         sans: ['Inter', 'sans-serif'],

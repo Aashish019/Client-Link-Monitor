@@ -4,30 +4,77 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+  --glass-bg: rgba(30, 41, 59, 0.7);
+  --glass-border: rgba(148, 163, 184, 0.1);
+  --surface-highlight: #1e293b;
+  --border: #334155;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --accent-color: #3b82f6;
+  --success-color: #10b981;
+  --warning-color: #ef4444;
+}
+
+[data-theme='light'] {
+  --bg-gradient: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(0, 0, 0, 0.05);
+  --surface-highlight: #f1f5f9;
+  --border: #e2e8f0;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --accent-color: #2563eb;
+  --success-color: #059669;
+  --warning-color: #dc2626;
+}
+
 @layer base {
   body {
-    @apply bg-bg text-text antialiased;
+    @apply transition-colors duration-300;
     font-family: 'Inter', sans-serif;
+    background: var(--bg-gradient);
+    min-height: 100vh;
+    color: var(--text-primary);
   }
 }
 
-/* Scrollbar styling for that premium feel */
+/* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
+
 ::-webkit-scrollbar-track {
-  background: #111217; 
-}
-::-webkit-scrollbar-thumb {
-  background: #2c3235; 
-  border-radius: 4px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #3274d9; 
+  background: transparent;
 }
 
-/* Glassmorphism helpers */
+::-webkit-scrollbar-thumb {
+  background: var(--glass-border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-color);
+}
+
+/* Glassmorphism Classes */
 .glass-panel {
-  @apply bg-surface/80 backdrop-blur-md border border-border shadow-lg rounded-xl;
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
+}
+
+.glass-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
+  @apply rounded-2xl transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl;
 }
