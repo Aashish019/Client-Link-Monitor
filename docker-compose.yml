@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   backend:
     build: ./backend
@@ -8,7 +6,7 @@ services:
       - "8000:8000"
     environment:
       - N8N_WEBHOOK_URL=https://n8n.mcmillan.solutions/webhook/monitor-alert
-    restart: unless-stopped
+    restart: always
     deploy:
       resources:
         limits:
@@ -22,7 +20,7 @@ services:
       - "5174:80"
     depends_on:
       - backend
-    restart: unless-stopped
+    restart: always
     deploy:
       resources:
         limits:
