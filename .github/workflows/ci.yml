@@ -7,6 +7,27 @@ on:
     branches: [ main ]
 
 jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Backend Security Scan (Bandit)
+        run: |
+          cd backend
+          uv sync --dev
+          uv run bandit -r . -ll
+
+      - name: Frontend Security Scan (npm audit)
+        run: |
+          cd frontend
+          npm audit --audit-level=high
+
   backend-ci:
     runs-on: ubuntu-latest
     defaults:
