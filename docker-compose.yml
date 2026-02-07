@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: monitor-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - N8N_WEBHOOK_URL=https://n8n.mcmillan.solutions/webhook/monitor-alert
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: monitor-frontend
+    ports:
+      - "5174:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
